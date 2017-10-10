@@ -1,0 +1,8 @@
+[package]
+authors = ["Byron Wasti <byron.wasti@gmail.com>"]
+name = "chip8-emulator"
+version = "0.1.0"
+
+[dependencies]
+termion = "1.5.1"
+tui = "0.1.3"
