@@ -4,10 +4,18 @@ This project contains a Chip-8 Emulator written entirely in Rust. The goal of th
 
 The project is currently a work in progress, and a few instructions are waiting to be implemented. Major things that are waiting to be completed are listed below.
 
-# TODO
+## Completed
+- Chip-8 memory pattern
+- Opcode interpretation
+- Basic instructions are implemented (math/load registers/jumps)
+- Basic understanding of how to work with tui-rs
+
+## TODO
 - Keyboard input and emulation
 - Emulate display and collision detection
 - Draw Chip-8 display data to the terminal using tui-rs
+- Add unit tests
+- Add integration tests
 - Rewrite the registers in an enumerated and safe manner
 - Rework the error system to use enumerated error messages
 - Add logging
