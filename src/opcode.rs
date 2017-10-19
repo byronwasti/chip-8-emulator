@@ -56,11 +56,11 @@ impl OpCode {
     }
 
     fn x_register(&self) -> Register {
-        ((self.opcode & 0x0F00) >> 2) as Register
+        ((self.opcode & 0x0F00) >> 8) as Register
     }
 
     fn y_register(&self) -> Register {
-        ((self.opcode & 0x00F0) >> 1) as Register
+        ((self.opcode & 0x00F0) >> 4) as Register
     }
 
     fn immediate(&self) -> Immediate {
@@ -73,19 +73,19 @@ impl OpCode {
 
     pub fn to_instruction(&self) -> Result<Instruction, String> {
         match self.opcode & 0xF000 {
-            0x0 => match self.opcode {
+            0x0000 => match self.opcode {
                 0x00E0 => Ok(Instruction::Clear),
                 0x00EE => Ok(Instruction::Return),
                 _ => Ok(Instruction::SYS(self.addr())),
             }
-            0x1 => Ok(Instruction::Jump(self.addr())),
-            0x2 => Ok(Instruction::Call(self.addr())),
-            0x3 => Ok(Instruction::SkipEqI(self.x_register(), self.immediate())),
-            0x4 => Ok(Instruction::SkipNeqI(self.x_register(), self.immediate())),
-            0x5 => Ok(Instruction::SkipEq(self.x_register(), self.y_register())),
-            0x6 => Ok(Instruction::LoadI(self.x_register(), self.immediate())),
-            0x7 => Ok(Instruction::AddI(self.x_register(), self.immediate())),
-            0x8 => match self.opcode & 0x000F {
+            0x1000 => Ok(Instruction::Jump(self.addr())),
+            0x2000 => Ok(Instruction::Call(self.addr())),
+            0x3000 => Ok(Instruction::SkipEqI(self.x_register(), self.immediate())),
+            0x4000 => Ok(Instruction::SkipNeqI(self.x_register(), self.immediate())),
+            0x5000 => Ok(Instruction::SkipEq(self.x_register(), self.y_register())),
+            0x6000 => Ok(Instruction::LoadI(self.x_register(), self.immediate())),
+            0x7000 => Ok(Instruction::AddI(self.x_register(), self.immediate())),
+            0x8000 => match self.opcode & 0x000F {
                 0x0 => Ok(Instruction::LoadR(self.x_register(), self.y_register())),
                 0x1 => Ok(Instruction::Or(self.x_register(), self.y_register())),
                 0x2 => Ok(Instruction::And(self.x_register(), self.y_register())),
@@ -97,20 +97,20 @@ impl OpCode {
                 0xE => Ok(Instruction::ShiftL(self.x_register())),
                 _ => Err("Invalid instruction!".to_string()),
             },
-            0x9 => match self.opcode & 0x000F {
+            0x9000 => match self.opcode & 0x000F {
                 0x0 => Ok(Instruction::SkipNeq(self.x_register(), self.y_register())),
                 _ => Err("Invalid instruction!".to_string()),
             }
-            0xA => Ok(Instruction::LoadIdx(self.addr())),
-            0xB => Ok(Instruction::JumpAddV0(self.addr())),
-            0xC => Ok(Instruction::Rand(self.x_register(), self.immediate())),
-            0xD => Ok(Instruction::Draw(self.x_register(), self.y_register(), self.nibble())),
-            0xE => match self.opcode & 0x00FF {
+            0xA000 => Ok(Instruction::LoadIdx(self.addr())),
+            0xB000 => Ok(Instruction::JumpAddV0(self.addr())),
+            0xC000 => Ok(Instruction::Rand(self.x_register(), self.immediate())),
+            0xD000 => Ok(Instruction::Draw(self.x_register(), self.y_register(), self.nibble())),
+            0xE000 => match self.opcode & 0x00FF {
                 0x9E => Ok(Instruction::SkipEqKey(self.x_register())),
                 0xA1 => Ok(Instruction::SkipNeqKey(self.x_register())),
                 _ => Err("Invalid instruction!".to_string()),
             }
-            0xF => match self.opcode & 0x00FF {
+            0xF000 => match self.opcode & 0x00FF {
                 0x07 => Ok(Instruction::LoadFromDT(self.x_register())),
                 0x0A => Ok(Instruction::LoadKey(self.x_register())),
                 0x15 => Ok(Instruction::SetDT(self.x_register())),
@@ -122,7 +122,9 @@ impl OpCode {
                 0x65 => Ok(Instruction::ReadRegs(self.x_register())),
                 _ => Err("Invalid instruction!".to_string()),
             }
-            _ => unreachable!(),
+            n => {
+                unreachable!()
+            }
         }
     }
 }

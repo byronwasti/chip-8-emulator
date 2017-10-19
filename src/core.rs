@@ -1,4 +1,6 @@
 use rand;
+use bit_range::BitRange;
+
 use opcode::{OpCode, Instruction};
 use keyboard::KeyCode;
 
@@ -17,7 +19,7 @@ pub struct Chip8 {
 
     // External interactions
     clear_flag: bool,
-    gfx: [u8; 64*32],
+    gfx: [[bool; 64]; 32],
     key_code: Option<KeyCode>,
 }
 
@@ -29,8 +31,10 @@ impl Chip8 {
 
         let mut memory: [u8; 4096] = [0; 4096];
         for (i, byte) in program.iter().enumerate() {
-            memory[i + 0x200] = byte.clone();
+            memory[i + 0x200] = *byte;
         }
+        Chip8::populate_builtin_sprites(&mut memory);
+
 
         Ok(Chip8 {
             memory: memory,
@@ -45,7 +49,7 @@ impl Chip8 {
             no_increment: false,
 
             clear_flag: false,
-            gfx: [0; 64*32],
+            gfx: [[false; 64]; 32], // Row-major order
             key_code: None,
         })
     }
@@ -58,7 +62,7 @@ impl Chip8 {
         self.clear_flag = false;
     }
 
-    pub fn get_display(&self) -> &[u8; 64*32] {
+    pub fn get_display(&self) -> &[[bool; 64]; 32] {
         &self.gfx
     }
 
@@ -82,9 +86,31 @@ impl Chip8 {
         }
     }
 
+    fn populate_builtin_sprites(memory: &mut [u8; 4096]) {
+        memory[..(5*16)].copy_from_slice(&[
+            0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+            0x20, 0x60, 0x20, 0x20, 0x70, // 1
+            0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+            0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+            0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+            0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+            0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+            0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+            0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+            0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+            0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+            0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+            0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+            0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+            0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+            0xF0, 0x80, 0xF0, 0x80, 0x80, // F
+            ]);
+    }
+
     fn handle_instruction(&mut self, instruction: Instruction) {
+        // TODO: Is there a better way to structure this?
         match instruction {
-            Instruction::SYS(addr) => return,
+            Instruction::SYS(_) => return,
             Instruction::Clear => self.clear_flag = true,
             Instruction::Return => {
                 self.stack_ptr -= 1;
@@ -126,8 +152,16 @@ impl Chip8 {
                 self.registers[regx as usize] ^= self.registers[regy as usize];
             }
             Instruction::Add(regx, regy) => {
-                self.registers[regx as usize] = self.registers[regx as usize]
-                    .wrapping_add(self.registers[regy as usize]);
+                let x_val = self.registers[regx as usize];
+                let y_val = self.registers[regy as usize];
+
+                let mut temp = (x_val as u16) + (y_val as u16);
+                if temp > 0xFF {
+                    self.registers[15] = 1;
+                    temp = temp % 0xFF;
+                }
+
+                self.registers[regx as usize] = temp as u8;
             }
             Instruction::Sub(regx, regy) => {
                 {// Set VF first 
@@ -178,17 +212,69 @@ impl Chip8 {
             Instruction::Rand(reg, byte) => {
                 self.registers[reg as usize] = rand::random::<u8>() & byte;
             }
-            Instruction::Draw(regx, regy, nib) => return, // TODO
-            Instruction::SkipEqKey(reg) => return, // TODO
-            Instruction::SkipNeqKey(reg) => return, // TODO
+            Instruction::Draw(regx, regy, nib) => {
+                let start = self.index as usize;
+                let end = (self.index + (nib as u16)) as usize;
+
+                // Iterate over our sprite data
+                for (idx, line) in self.memory[start..end].iter().enumerate() {
+                    // Get array of bits
+                    let mut bits = [0u8; 8];
+                    for i in 0..8 {
+                        bits[i] = (line >> i) & 1;
+                    }
+
+                    for (bit_pos, bit) in bits.iter().enumerate() {
+                        // Get positions
+                        let x_pos = (regx as usize) + (bit_pos as usize);
+                        let y_pos = (regy as usize) + (idx as usize);
+
+                        // Get value
+                        let val = (*bit == 1);
+                        
+                        // XOR manually
+                        if self.gfx[y_pos][x_pos] == val && val == true {
+                            self.registers[15] = 1;
+                            self.gfx[y_pos][x_pos] = !val;
+                        } else {
+                            self.gfx[y_pos][x_pos] = val;
+                        }
+                    }
+                }
+
+
+            }
+            Instruction::SkipEqKey(reg) => {
+                if let Some(key_code) = self.key_code {
+                    if key_code as u8 == self.registers[reg as usize] {
+                        self.pc += 2;
+                    }
+                }
+            }
+            Instruction::SkipNeqKey(reg) => {
+                if let Some(key_code) = self.key_code {
+                    if key_code as u8 != self.registers[reg as usize] {
+                        self.pc += 2;
+                    }
+                }
+            }
             Instruction::LoadFromDT(reg) => self.registers[reg as usize] = self.delay_timer,
-            Instruction::LoadKey(reg) => return, // TODO
+            Instruction::LoadKey(reg) => {
+                if let Some(key_code) = self.key_code {
+                    self.no_increment = false;
+                    self.registers[reg as usize] = key_code as u8;
+                } else {
+                    self.no_increment = true;
+                }
+            }
             Instruction::SetDT(reg) => self.delay_timer = self.registers[reg as usize],
             Instruction::SetST(reg) => self.sound_timer = self.registers[reg as usize],
             Instruction::AddIdx(reg) => {
                 self.index = self.index.wrapping_add(self.registers[reg as usize] as u16)
             }
-            Instruction::LoadSprite(reg) => return, // TODO
+            Instruction::LoadSprite(reg) => {
+                self.index = (self.registers[reg as usize] * 5) as u16;
+            }
             Instruction::LoadBCD(reg) => {
                 let mut reg = self.registers[reg as usize];
                 

@@ -1,4 +1,4 @@
-
+#[derive(Copy, Clone)]
 pub enum KeyCode {
     K0,
     K1,

@@ -1,3 +1,4 @@
 /target/
 /roms/
 **/*.rs.bk
+*.swp

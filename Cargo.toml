@@ -4,6 +4,7 @@ name = "chip8-emulator"
 version = "0.1.0"
 
 [dependencies]
+bit_range = "0.1.0"
 rand = "0.3.17"
 termion = "1.5.1"
 tui = "0.1.3"
