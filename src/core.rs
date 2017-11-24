@@ -1,8 +1,9 @@
 use rand;
-use bit_range::BitRange;
 
 use opcode::{OpCode, Instruction};
 use keyboard::KeyCode;
+
+pub type Screen = [[bool; 64]; 32];
 
 pub struct Chip8 {
     memory: [u8; 4096],
@@ -19,7 +20,7 @@ pub struct Chip8 {
 
     // External interactions
     clear_flag: bool,
-    gfx: [[bool; 64]; 32],
+    screen: Screen,
     key_code: Option<KeyCode>,
 }
 
@@ -49,7 +50,7 @@ impl Chip8 {
             no_increment: false,
 
             clear_flag: false,
-            gfx: [[false; 64]; 32], // Row-major order
+            screen: [[false; 64]; 32], // Row-major order
             key_code: None,
         })
     }
@@ -63,7 +64,7 @@ impl Chip8 {
     }
 
     pub fn get_display(&self) -> &[[bool; 64]; 32] {
-        &self.gfx
+        &self.screen
     }
 
     pub fn set_key_code(&mut self, key_code: Option<KeyCode>) {
@@ -233,11 +234,11 @@ impl Chip8 {
                         let val = (*bit == 1);
                         
                         // XOR manually
-                        if self.gfx[y_pos][x_pos] == val && val == true {
+                        if self.screen[y_pos][x_pos] == val && val == true {
                             self.registers[15] = 1;
-                            self.gfx[y_pos][x_pos] = !val;
+                            self.screen[y_pos][x_pos] = !val;
                         } else {
-                            self.gfx[y_pos][x_pos] = val;
+                            self.screen[y_pos][x_pos] = val;
                         }
                     }
                 }

@@ -9,14 +9,61 @@ use termion::input::TermRead;
 use tui::Terminal;
 use tui::backend::TermionBackend;
 use tui::widgets::{Widget, Block, border};
-use tui::widgets::canvas::{Canvas, Map, MapResolution, Line, Points};
+use tui::widgets::canvas::{Canvas, Line, Points};
 use tui::layout::{Group, Rect, Direction, Size};
 use tui::style::Color;
 
-enum Event {
-    Input(event::Key),
+use chip8_emulator::core::Screen;
+
+pub struct Display {
+    terminal: Terminal<TermionBackend>,
 }
 
+impl Display {
+    pub fn new() -> Display {
+        let backend = TermionBackend::new().unwrap();
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.clear().unwrap();
+
+        Display {
+            terminal,
+        }
+    }
+
+    pub fn draw(&mut self, chip8_screen: &Screen) {
+        let mut points = Vec::new();
+        for (y, line) in chip8_screen.iter().enumerate() {
+            for (x, value) in line.iter().enumerate() {
+                if *value == true {
+                    points.push( (x as f64, y as f64) );
+                }
+            }
+        }
+
+        let size = self.terminal.size().unwrap();
+        Group::default()
+            .direction(Direction::Vertical)
+            .margin(1)
+            .sizes(&[Size::Percent(100)])
+            .render(&mut self.terminal, &size, |t, chunks| {
+                Canvas::default()
+                    .block(Block::default().borders(border::ALL).title("Canvas"))
+                    .paint(|ctx| {
+                        ctx.draw(&Points {
+                            coords: &points[..],
+                            color: Color::Red,
+                        });
+                    })
+                    .x_bounds([0.0, 64.0])
+                    .y_bounds([0.0, 48.0])
+                    .render(t, &chunks[0]);
+            });
+
+        self.terminal.draw().unwrap();
+    }
+}
+
+/*
 pub fn playground() {
     let backend = TermionBackend::new().unwrap();
     let mut terminal = Terminal::new(backend).unwrap();
@@ -88,3 +135,4 @@ fn draw(t: &mut Terminal<TermionBackend>) {
         });
     t.draw().unwrap();
 }
+*/
