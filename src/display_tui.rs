@@ -13,24 +13,28 @@ use tui::widgets::canvas::{Canvas, Line, Points};
 use tui::layout::{Group, Rect, Direction, Size};
 use tui::style::Color;
 
-use chip8_emulator::core::Screen;
+//use chip8_emulator::core::Screen;
+use peripherals::Chip8Disp;
 
-pub struct Display {
+pub struct TuiDisplay {
     terminal: Terminal<TermionBackend>,
 }
 
-impl Display {
-    pub fn new() -> Display {
+impl TuiDisplay {
+    pub fn new() -> TuiDisplay {
         let backend = TermionBackend::new().unwrap();
         let mut terminal = Terminal::new(backend).unwrap();
         terminal.clear().unwrap();
 
-        Display {
+        TuiDisplay {
             terminal,
         }
     }
+}
 
-    pub fn draw(&mut self, chip8_screen: &Screen) {
+impl Chip8Disp for TuiDisplay {
+    fn draw(&mut self) {
+        /*
         let mut points = Vec::new();
         for (y, line) in chip8_screen.iter().enumerate() {
             for (x, value) in line.iter().enumerate() {
@@ -60,6 +64,10 @@ impl Display {
             });
 
         self.terminal.draw().unwrap();
+        */
+    }
+
+    fn set_pixel_data(&mut self) {
     }
 }
 

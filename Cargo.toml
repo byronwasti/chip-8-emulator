@@ -5,5 +5,7 @@ version = "0.1.0"
 
 [dependencies]
 rand = "0.3.17"
+structopt = "0.1.6"
+structopt-derive = "0.1.6"
 termion = "1.5.1"
 tui = "0.1.3"

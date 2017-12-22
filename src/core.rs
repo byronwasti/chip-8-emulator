@@ -1,11 +1,9 @@
 use rand;
 
 use opcode::{OpCode, Instruction};
-use keyboard::KeyCode;
+use peripherals::{Chip8Disp, Chip8Input};
 
-pub type Screen = [[bool; 64]; 32];
-
-pub struct Chip8 {
+pub struct Chip8<T: Chip8Disp, U: Chip8Input>  {
     memory: [u8; 4096],
     registers: [u8; 16],
     pc: u16,
@@ -19,25 +17,38 @@ pub struct Chip8 {
     no_increment: bool,
 
     // External interactions
-    clear_flag: bool,
-    screen: Screen,
-    key_code: Option<KeyCode>,
+    screen: Option<T>,
+    keyboard: Option<U>,
 }
 
-impl Chip8 {
-    pub fn new( program: &[u8] ) -> Result<Chip8, String> {
-        if program.len() > (4096 - 512) {
-            return Err("Invalid program length!".to_string());
-        }
+fn populate_builtin_sprites(memory: &mut [u8; 4096]) {
+    memory[..(5*16)].copy_from_slice(&[
+        0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+        0x20, 0x60, 0x20, 0x20, 0x70, // 1
+        0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+        0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+        0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+        0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+        0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+        0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+        0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+        0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+        0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+        0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+        0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+        0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+        0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+        0xF0, 0x80, 0xF0, 0x80, 0x80, // F
+        ]);
+}
 
-        let mut memory: [u8; 4096] = [0; 4096];
-        for (i, byte) in program.iter().enumerate() {
-            memory[i + 0x200] = *byte;
-        }
-        Chip8::populate_builtin_sprites(&mut memory);
+impl<T, U> Chip8<T, U>  
+    where T: Chip8Disp, U: Chip8Input {
+    pub fn new() -> Chip8<T, U> {
+        let mut memory = [0; 4096];
+        populate_builtin_sprites(&mut memory);
 
-
-        Ok(Chip8 {
+        Chip8 {
             memory: memory,
             registers: [0; 16],
             pc: 0x200,
@@ -49,28 +60,21 @@ impl Chip8 {
 
             no_increment: false,
 
-            clear_flag: false,
-            screen: [[false; 64]; 32], // Row-major order
-            key_code: None,
-        })
+            screen: None,
+            keyboard: None,
+        }
     }
 
-    pub fn get_clear_flag(&self) -> bool {
-        self.clear_flag
-    }
+    pub fn upload_rom(&mut self, program: &[u8]) -> Result<(), String> {
+        if program.len() > (4096 - 512) {
+            return Err("Invalid program length!".to_string());
+        }
 
-    pub fn unset_clear_flag(&mut self) {
-        self.clear_flag = false;
-    }
+        self.memory[0x200..].copy_from_slice(program);
 
-    pub fn get_display(&self) -> &[[bool; 64]; 32] {
-        &self.screen
+        Ok(())
     }
-
-    pub fn set_key_code(&mut self, key_code: Option<KeyCode>) {
-        self.key_code = key_code;
-    }
-
+    
     pub fn cycle(&mut self) {
         let bytes: [u8; 2] = [ self.memory[self.pc as usize],
                                self.memory[(self.pc + 1) as usize] ];
@@ -87,32 +91,15 @@ impl Chip8 {
         }
     }
 
-    fn populate_builtin_sprites(memory: &mut [u8; 4096]) {
-        memory[..(5*16)].copy_from_slice(&[
-            0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
-            0x20, 0x60, 0x20, 0x20, 0x70, // 1
-            0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
-            0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
-            0x90, 0x90, 0xF0, 0x10, 0x10, // 4
-            0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
-            0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
-            0xF0, 0x10, 0x20, 0x40, 0x40, // 7
-            0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
-            0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
-            0xF0, 0x90, 0xF0, 0x90, 0x90, // A
-            0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
-            0xF0, 0x80, 0x80, 0x80, 0xF0, // C
-            0xE0, 0x90, 0x90, 0x90, 0xE0, // D
-            0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
-            0xF0, 0x80, 0xF0, 0x80, 0x80, // F
-            ]);
-    }
 
     fn handle_instruction(&mut self, instruction: Instruction) {
-        // TODO: Is there a better way to structure this?
         match instruction {
             Instruction::SYS(_) => return,
-            Instruction::Clear => self.clear_flag = true,
+            Instruction::Clear => {
+                /*
+                self.clear_flag = true,
+                */
+            }
             Instruction::Return => {
                 self.stack_ptr -= 1;
                 self.pc = self.stack[self.stack_ptr as usize];
@@ -214,6 +201,7 @@ impl Chip8 {
                 self.registers[reg as usize] = rand::random::<u8>() & byte;
             }
             Instruction::Draw(regx, regy, nib) => {
+                /*
                 let start = self.index as usize;
                 let end = (self.index + (nib as u16)) as usize;
 
@@ -242,31 +230,36 @@ impl Chip8 {
                         }
                     }
                 }
-
-
+                */
             }
             Instruction::SkipEqKey(reg) => {
+                /*
                 if let Some(key_code) = self.key_code {
                     if key_code as u8 == self.registers[reg as usize] {
                         self.pc += 2;
                     }
                 }
+                */
             }
             Instruction::SkipNeqKey(reg) => {
+                /*
                 if let Some(key_code) = self.key_code {
                     if key_code as u8 != self.registers[reg as usize] {
                         self.pc += 2;
                     }
                 }
+                */
             }
             Instruction::LoadFromDT(reg) => self.registers[reg as usize] = self.delay_timer,
             Instruction::LoadKey(reg) => {
+                /*
                 if let Some(key_code) = self.key_code {
                     self.no_increment = false;
                     self.registers[reg as usize] = key_code as u8;
                 } else {
                     self.no_increment = true;
                 }
+                */
             }
             Instruction::SetDT(reg) => self.delay_timer = self.registers[reg as usize],
             Instruction::SetST(reg) => self.sound_timer = self.registers[reg as usize],
