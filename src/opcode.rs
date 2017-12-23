@@ -122,7 +122,7 @@ impl OpCode {
                 0x65 => Ok(Instruction::ReadRegs(self.x_register())),
                 _ => Err("Invalid instruction!".to_string()),
             }
-            n => {
+            _ => {
                 unreachable!()
             }
         }

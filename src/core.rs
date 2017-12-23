@@ -1,7 +1,7 @@
 use rand;
 
 use opcode::{OpCode, Instruction};
-use peripherals::{Chip8Disp, Chip8Input};
+use peripherals::{Chip8Disp, Chip8Input, PixelData, Chip8Key};
 
 pub struct Chip8<T: Chip8Disp, U: Chip8Input>  {
     memory: [u8; 4096],
@@ -13,10 +13,7 @@ pub struct Chip8<T: Chip8Disp, U: Chip8Input>  {
     delay_timer: u8,
     sound_timer: u8,
 
-    // Internal flag
-    no_increment: bool,
-
-    // External interactions
+    // Peripherals
     screen: Option<T>,
     keyboard: Option<U>,
 }
@@ -58,24 +55,39 @@ impl<T, U> Chip8<T, U>
             delay_timer: 0,
             sound_timer: 0,
 
-            no_increment: false,
-
             screen: None,
             keyboard: None,
         }
     }
 
+    pub fn connect_display(&mut self, display: T) {
+        self.screen = Some(display);
+    }
+
+    pub fn connect_keyboard(&mut self, keyboard: U) {
+        self.keyboard = Some(keyboard);
+    }
+
     pub fn upload_rom(&mut self, program: &[u8]) -> Result<(), String> {
-        if program.len() > (4096 - 512) {
+        if program.len() > (4096 - 0x200) {
             return Err("Invalid program length!".to_string());
         }
 
-        self.memory[0x200..].copy_from_slice(program);
+        self.memory[0x200..(0x200 + program.len())].copy_from_slice(program);
 
         Ok(())
     }
     
-    pub fn cycle(&mut self) {
+    pub fn cycle_once(&mut self) -> bool {
+        // Poll keyboard to allow it to update inputs
+        if let Some(ref mut keyboard) = self.keyboard {
+            let quit = keyboard.poll();
+            if quit {
+                return quit;
+            }
+        }
+
+        // Convert raw assembly at pc into parsed Opcode
         let bytes: [u8; 2] = [ self.memory[self.pc as usize],
                                self.memory[(self.pc + 1) as usize] ];
         let opcode = OpCode::new(&bytes);
@@ -86,19 +98,50 @@ impl<T, U> Chip8<T, U>
         }
 
         // Increment our program counter
-        if !self.no_increment {
-            self.pc += 2;
+        self.pc += 2;
+
+        // Decrement timers
+        if self.sound_timer > 0 {
+            self.sound_timer -= 1;
         }
+
+        if self.delay_timer > 0 {
+            self.delay_timer -= 1;
+        }
+
+        // Draw using the screen
+        if let Some(ref mut screen) = self.screen {
+            screen.draw();
+        }
+
+        false
     }
 
+    pub fn run(&mut self) {
+        /*
+        let rate = Duration::new(0, 500); // 1/s
+
+        for _ in 0..4 {
+            let now = time::Instant::now();
+
+            chip8.cycle();
+            let screen = chip8.get_display();
+            display.draw(screen);
+
+            if now.elapsed() < rate {
+                thread::sleep(rate - now.elapsed());
+            }
+        }
+        */
+    }
 
     fn handle_instruction(&mut self, instruction: Instruction) {
         match instruction {
             Instruction::SYS(_) => return,
             Instruction::Clear => {
-                /*
-                self.clear_flag = true,
-                */
+                if let Some(ref mut screen) = self.screen {
+                    screen.clear();
+                }
             }
             Instruction::Return => {
                 self.stack_ptr -= 1;
@@ -201,7 +244,7 @@ impl<T, U> Chip8<T, U>
                 self.registers[reg as usize] = rand::random::<u8>() & byte;
             }
             Instruction::Draw(regx, regy, nib) => {
-                /*
+                let mut pixel_data = Vec::new();
                 let start = self.index as usize;
                 let end = (self.index + (nib as u16)) as usize;
 
@@ -219,39 +262,50 @@ impl<T, U> Chip8<T, U>
                         let y_pos = (regy as usize) + (idx as usize);
 
                         // Get value
-                        let val = (*bit == 1);
+                        let val = *bit == 1;
+
+                        let pixel = PixelData{ x:x_pos, y:y_pos, val:val };
                         
-                        // XOR manually
-                        if self.screen[y_pos][x_pos] == val && val == true {
-                            self.registers[15] = 1;
-                            self.screen[y_pos][x_pos] = !val;
-                        } else {
-                            self.screen[y_pos][x_pos] = val;
+                        pixel_data.push(pixel);
+                    }
+                }
+
+                if let Some(ref mut screen) = self.screen {
+                    screen.set_pixel_data(&pixel_data[..]);
+                }
+            }
+            Instruction::SkipEqKey(reg) => {
+                if let Ok(key) = Chip8Key::new(reg) {
+                    if let Some(ref mut keyboard) = self.keyboard {
+                        if let Some(key_pressed) = keyboard.key_pressed() {
+                            if key == key_pressed {
+                                self.pc += 2;
+                            }
                         }
                     }
                 }
-                */
-            }
-            Instruction::SkipEqKey(reg) => {
-                /*
-                if let Some(key_code) = self.key_code {
-                    if key_code as u8 == self.registers[reg as usize] {
-                        self.pc += 2;
-                    }
-                }
-                */
             }
             Instruction::SkipNeqKey(reg) => {
-                /*
-                if let Some(key_code) = self.key_code {
-                    if key_code as u8 != self.registers[reg as usize] {
-                        self.pc += 2;
+                if let Ok(key) = Chip8Key::new(reg) {
+                    if let Some(ref mut keyboard) = self.keyboard {
+                        if let Some(key_pressed) = keyboard.key_pressed() {
+                            if key != key_pressed {
+                                self.pc += 2;
+                            }
+                        }
                     }
                 }
-                */
             }
             Instruction::LoadFromDT(reg) => self.registers[reg as usize] = self.delay_timer,
             Instruction::LoadKey(reg) => {
+
+                if let Some(ref mut keyboard) = self.keyboard {
+                    if let Some(key_pressed) = keyboard.key_pressed() {
+                        self.registers[reg as usize] = key_pressed as u8;
+                    } else {
+                        self.pc -= 2;
+                    }
+                }
                 /*
                 if let Some(key_code) = self.key_code {
                     self.no_increment = false;

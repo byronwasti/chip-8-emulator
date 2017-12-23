@@ -1,23 +1,15 @@
-use std::io;
-use std::thread;
-use std::time;
-use std::sync::mpsc;
-
-use termion::event;
-use termion::input::TermRead;
-
 use tui::Terminal;
 use tui::backend::TermionBackend;
 use tui::widgets::{Widget, Block, border};
-use tui::widgets::canvas::{Canvas, Line, Points};
-use tui::layout::{Group, Rect, Direction, Size};
+use tui::widgets::canvas::{Canvas, Points};
+use tui::layout::{Group, Direction, Size};
 use tui::style::Color;
 
-//use chip8_emulator::core::Screen;
-use peripherals::Chip8Disp;
+use peripherals::{Chip8Disp, PixelData};
 
 pub struct TuiDisplay {
     terminal: Terminal<TermionBackend>,
+    data: [[bool; 64]; 32],
 }
 
 impl TuiDisplay {
@@ -28,15 +20,15 @@ impl TuiDisplay {
 
         TuiDisplay {
             terminal,
+            data: [[false; 64]; 32],
         }
     }
 }
 
 impl Chip8Disp for TuiDisplay {
     fn draw(&mut self) {
-        /*
         let mut points = Vec::new();
-        for (y, line) in chip8_screen.iter().enumerate() {
+        for (y, line) in self.data.iter().enumerate() {
             for (x, value) in line.iter().enumerate() {
                 if *value == true {
                     points.push( (x as f64, y as f64) );
@@ -64,10 +56,23 @@ impl Chip8Disp for TuiDisplay {
             });
 
         self.terminal.draw().unwrap();
-        */
     }
 
-    fn set_pixel_data(&mut self) {
+    fn set_pixel_data(&mut self, data: &[PixelData]) -> bool {
+        let mut return_val = false;
+        for (_, pixel) in data.iter().enumerate() {
+            if self.data[pixel.y][pixel.x] != pixel.val {
+                return_val = true;
+            }
+
+            self.data[pixel.y][pixel.x] = pixel.val;
+        }
+
+        return_val
+    }
+
+    fn clear(&mut self) {
+        self.data = [[false; 64]; 32];
     }
 }
 

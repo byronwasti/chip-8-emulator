@@ -7,7 +7,6 @@ extern crate structopt_derive;
 use std::io::Read;
 use std::{thread, time};
 use std::time::Duration;
-use std::sync::mpsc;
 use std::fs::File;
 
 use structopt::StructOpt;
@@ -22,48 +21,37 @@ struct Cli {
 }
 
 fn main() {
-
     let cli = Cli::from_args();
-    println!("{}", cli.source);
-
-    let mut file = File::open(cli.source).expect("Invalid filename");
-    let mut contents = Vec::new();
-    file.read_to_end(&mut contents).expect("Invalid file");
-
-    println!("{:?}", contents);
-
-    let program = [0x63, 0x03, 0x64, 0x00, 0xF3, 0x29, 0xD3, 0x45];
-
     let mut chip8: Chip8<TuiDisplay, KeyboardStdin> = Chip8::new();
+
+    // Load program from file & upload to core
+    let mut file = File::open(cli.source).expect("Invalid filename");
+    let mut program = Vec::new();
+    file.read_to_end(&mut program).expect("Invalid file");
+    chip8.upload_rom(&program).expect("Invalid program length");
+
+    // Set up chip8 core with peripherals
+    let keyboard = KeyboardStdin::new();
+    chip8.connect_keyboard(keyboard);
+
+    let display = TuiDisplay::new();
+    chip8.connect_display(display);
+
+    // Run indefinitely
+    //chip8.run();
 
     let rate = Duration::new(0, 500); // 1/s
 
-    //let (tx, rx) = mpsc::channel();
-
-    /* 
-    thread::spawn(move || {
-        loop {
-            let input: Option<u32> = std::io::stdin()
-                .lock()
-                .bytes()
-                .last();
-                
-            println!("{:?}", input);
-        }
-    });
-    */
-
-    /*
-    for _ in 0..4 {
+    loop {
         let now = time::Instant::now();
 
-        chip8.cycle();
-        let screen = chip8.get_display();
-        display.draw(screen);
+        let quit = chip8.cycle_once();
+        if quit {
+            break;
+        }
 
         if now.elapsed() < rate {
             thread::sleep(rate - now.elapsed());
         }
     }
-    */
 }
