@@ -1,3 +1,4 @@
+#[derive(Debug)]
 pub struct PixelData { pub x: usize, pub y: usize, pub val: bool }
 
 pub trait Chip8Disp {

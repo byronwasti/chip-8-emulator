@@ -5,8 +5,6 @@ extern crate structopt;
 extern crate structopt_derive;
 
 use std::io::Read;
-use std::{thread, time};
-use std::time::Duration;
 use std::fs::File;
 
 use structopt::StructOpt;
@@ -38,20 +36,6 @@ fn main() {
     chip8.connect_display(display);
 
     // Run indefinitely
-    //chip8.run();
-
-    let rate = Duration::new(0, 500); // 1/s
-
-    loop {
-        let now = time::Instant::now();
-
-        let quit = chip8.cycle_once();
-        if quit {
-            break;
-        }
-
-        if now.elapsed() < rate {
-            thread::sleep(rate - now.elapsed());
-        }
-    }
+    chip8.run();
 }
+

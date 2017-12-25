@@ -3,6 +3,7 @@ type Register = u8;
 type Immediate = u8;
 type Nibble = u8;
 
+#[derive(Debug)]
 pub enum Instruction {
     SYS(Address),
     Clear,

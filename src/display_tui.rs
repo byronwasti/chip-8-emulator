@@ -29,6 +29,7 @@ impl Chip8Disp for TuiDisplay {
     fn draw(&mut self) {
         let mut points = Vec::new();
         for (y, line) in self.data.iter().enumerate() {
+            let y = self.data.len() - y - 1;
             for (x, value) in line.iter().enumerate() {
                 if *value == true {
                     points.push( (x as f64, y as f64) );
@@ -51,7 +52,7 @@ impl Chip8Disp for TuiDisplay {
                         });
                     })
                     .x_bounds([0.0, 64.0])
-                    .y_bounds([0.0, 48.0])
+                    .y_bounds([0.0, 32.0])
                     .render(t, &chunks[0]);
             });
 
@@ -61,11 +62,16 @@ impl Chip8Disp for TuiDisplay {
     fn set_pixel_data(&mut self, data: &[PixelData]) -> bool {
         let mut return_val = false;
         for (_, pixel) in data.iter().enumerate() {
-            if self.data[pixel.y][pixel.x] != pixel.val {
-                return_val = true;
+            if pixel.x >= 64 || pixel.y >= 32 {
+                continue;
             }
 
-            self.data[pixel.y][pixel.x] = pixel.val;
+            if pixel.val && self.data[pixel.y][pixel.x] {
+                self.data[pixel.y][pixel.x] = false;
+                return_val = true;
+            } else if !self.data[pixel.y][pixel.x] {
+                self.data[pixel.y][pixel.x] = pixel.val;
+            }
         }
 
         return_val

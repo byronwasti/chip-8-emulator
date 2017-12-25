@@ -1,4 +1,6 @@
 use rand;
+use std::{thread, time};
+use std::time::Duration;
 
 use opcode::{OpCode, Instruction};
 use peripherals::{Chip8Disp, Chip8Input, PixelData, Chip8Key};
@@ -92,8 +94,10 @@ impl<T, U> Chip8<T, U>
                                self.memory[(self.pc + 1) as usize] ];
         let opcode = OpCode::new(&bytes);
 
+
         // Ignore error instructions for now
         if let Ok(instruction) = opcode.to_instruction() {
+            //println!("pc: {}, op: {:?}", self.pc, opcode.to_instruction());
             self.handle_instruction(instruction);
         }
 
@@ -118,21 +122,19 @@ impl<T, U> Chip8<T, U>
     }
 
     pub fn run(&mut self) {
-        /*
         let rate = Duration::new(0, 500); // 1/s
-
-        for _ in 0..4 {
+        loop {
             let now = time::Instant::now();
 
-            chip8.cycle();
-            let screen = chip8.get_display();
-            display.draw(screen);
+            let quit = self.cycle_once();
+            if quit {
+                break;
+            }
 
             if now.elapsed() < rate {
                 thread::sleep(rate - now.elapsed());
             }
         }
-        */
     }
 
     fn handle_instruction(&mut self, instruction: Instruction) {
@@ -147,14 +149,16 @@ impl<T, U> Chip8<T, U>
                 self.stack_ptr -= 1;
                 self.pc = self.stack[self.stack_ptr as usize];
             }
-            Instruction::Jump(addr) => self.pc = addr,
+            Instruction::Jump(addr) => self.pc = addr - 2,
             Instruction::Call(addr) => {
                 self.stack[self.stack_ptr as usize] = self.pc;
-                self.pc = addr;
+                self.pc = addr - 2;
                 self.stack_ptr += 1;
             }
-            Instruction::SkipEqI(reg, byte) => if self.registers[reg as usize] == byte {
-                self.pc += 2
+            Instruction::SkipEqI(reg, byte) => {
+                if self.registers[reg as usize] == byte {
+                    self.pc += 2
+                }
             }
             Instruction::SkipNeqI(reg, byte) => {
                 if self.registers[reg as usize] != byte { 
@@ -239,7 +243,7 @@ impl<T, U> Chip8<T, U>
                 }
             }
             Instruction::LoadIdx(addr) => self.index = addr,
-            Instruction::JumpAddV0(addr) => self.pc = addr + self.registers[0x0] as u16,
+            Instruction::JumpAddV0(addr) => self.pc = addr - 2 + self.registers[0x0] as u16,
             Instruction::Rand(reg, byte) => {
                 self.registers[reg as usize] = rand::random::<u8>() & byte;
             }
@@ -258,20 +262,20 @@ impl<T, U> Chip8<T, U>
 
                     for (bit_pos, bit) in bits.iter().enumerate() {
                         // Get positions
-                        let x_pos = (regx as usize) + (bit_pos as usize);
-                        let y_pos = (regy as usize) + (idx as usize);
+                        let x_pos = (self.registers[regx as usize]) + (bit_pos as u8);
+                        let y_pos = (self.registers[regy as usize]) + (idx as u8);
 
                         // Get value
                         let val = *bit == 1;
 
-                        let pixel = PixelData{ x:x_pos, y:y_pos, val:val };
+                        let pixel = PixelData{ x: x_pos as usize, y: y_pos as usize, val: val };
                         
                         pixel_data.push(pixel);
                     }
                 }
 
                 if let Some(ref mut screen) = self.screen {
-                    screen.set_pixel_data(&pixel_data[..]);
+                    let collision = screen.set_pixel_data(&pixel_data[..]);
                 }
             }
             Instruction::SkipEqKey(reg) => {
@@ -303,17 +307,11 @@ impl<T, U> Chip8<T, U>
                     if let Some(key_pressed) = keyboard.key_pressed() {
                         self.registers[reg as usize] = key_pressed as u8;
                     } else {
+                        // Decrement PC so that we stay on this instruction
+                        // until a key has been pressed.
                         self.pc -= 2;
                     }
                 }
-                /*
-                if let Some(key_code) = self.key_code {
-                    self.no_increment = false;
-                    self.registers[reg as usize] = key_code as u8;
-                } else {
-                    self.no_increment = true;
-                }
-                */
             }
             Instruction::SetDT(reg) => self.delay_timer = self.registers[reg as usize],
             Instruction::SetST(reg) => self.sound_timer = self.registers[reg as usize],

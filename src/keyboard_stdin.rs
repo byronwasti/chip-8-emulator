@@ -37,29 +37,29 @@ impl KeyboardStdin {
 
             for c in stdin.keys() {
                 match c.unwrap() {
-                    Key::Char('q') => {
+                    Key::Char('p') => {
                         thread_tx.send(AsyncMsg::Quit).unwrap();
                         break;
                     }
                     Key::Char(c) => {
                         use self::Chip8Key::*;
                         match c {
-                            'a' => thread_tx.send(AsyncMsg::KeyInput(KeyA)).unwrap(),
-                            'b' => thread_tx.send(AsyncMsg::KeyInput(KeyB)).unwrap(),
-                            'c' => thread_tx.send(AsyncMsg::KeyInput(KeyC)).unwrap(),
-                            'd' => thread_tx.send(AsyncMsg::KeyInput(KeyD)).unwrap(),
-                            'e' => thread_tx.send(AsyncMsg::KeyInput(KeyE)).unwrap(),
-                            'f' => thread_tx.send(AsyncMsg::KeyInput(KeyF)).unwrap(),
-                            '0' => thread_tx.send(AsyncMsg::KeyInput(Key0)).unwrap(),
                             '1' => thread_tx.send(AsyncMsg::KeyInput(Key1)).unwrap(),
                             '2' => thread_tx.send(AsyncMsg::KeyInput(Key2)).unwrap(),
                             '3' => thread_tx.send(AsyncMsg::KeyInput(Key3)).unwrap(),
-                            '4' => thread_tx.send(AsyncMsg::KeyInput(Key4)).unwrap(),
-                            '5' => thread_tx.send(AsyncMsg::KeyInput(Key5)).unwrap(),
-                            '6' => thread_tx.send(AsyncMsg::KeyInput(Key6)).unwrap(),
-                            '7' => thread_tx.send(AsyncMsg::KeyInput(Key7)).unwrap(),
-                            '8' => thread_tx.send(AsyncMsg::KeyInput(Key8)).unwrap(),
-                            '9' => thread_tx.send(AsyncMsg::KeyInput(Key9)).unwrap(),
+                            'q' => thread_tx.send(AsyncMsg::KeyInput(Key4)).unwrap(),
+                            'w' => thread_tx.send(AsyncMsg::KeyInput(Key5)).unwrap(),
+                            'e' => thread_tx.send(AsyncMsg::KeyInput(Key6)).unwrap(),
+                            'a' => thread_tx.send(AsyncMsg::KeyInput(Key7)).unwrap(),
+                            's' => thread_tx.send(AsyncMsg::KeyInput(Key8)).unwrap(),
+                            'd' => thread_tx.send(AsyncMsg::KeyInput(Key9)).unwrap(),
+                            'x' => thread_tx.send(AsyncMsg::KeyInput(Key0)).unwrap(),
+                            'z' => thread_tx.send(AsyncMsg::KeyInput(KeyA)).unwrap(),
+                            'c' => thread_tx.send(AsyncMsg::KeyInput(KeyB)).unwrap(),
+                            '4' => thread_tx.send(AsyncMsg::KeyInput(KeyC)).unwrap(),
+                            'r' => thread_tx.send(AsyncMsg::KeyInput(KeyD)).unwrap(),
+                            'f' => thread_tx.send(AsyncMsg::KeyInput(KeyE)).unwrap(),
+                            'v' => thread_tx.send(AsyncMsg::KeyInput(KeyF)).unwrap(),
                             _ => {},
                         }
                     }
@@ -78,7 +78,7 @@ impl Chip8Input for KeyboardStdin {
     fn poll(&mut self) -> bool {
         // Function returns true if it is time to quit
         
-        self.key_pressed = None;
+        //self.key_pressed = None;
 
         while let Ok(value) = self.rx_channel.try_recv() {
             match value {
