@@ -2,7 +2,6 @@ use termion::event::Key;
 use termion::input::TermRead;
 use termion::raw::IntoRawMode;
 use std::io;
-
 use std::thread;
 use std::sync::mpsc;
 

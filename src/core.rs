@@ -1,9 +1,12 @@
 use rand;
 use std::{thread, time};
 use std::time::Duration;
+use std::sync::mpsc;
 
 use opcode::{OpCode, Instruction};
 use peripherals::{Chip8Disp, Chip8Input, PixelData, Chip8Key};
+
+struct TimeQuantum;
 
 pub struct Chip8<T: Chip8Disp, U: Chip8Input>  {
     memory: [u8; 4096],
@@ -12,8 +15,11 @@ pub struct Chip8<T: Chip8Disp, U: Chip8Input>  {
     index: u16,
     stack: [u16; 16],
     stack_ptr: u8,
+
+    // Timers
     delay_timer: u8,
     sound_timer: u8,
+    rx_async_time: mpsc::Receiver<TimeQuantum>,
 
     // Peripherals
     screen: Option<T>,
@@ -47,6 +53,16 @@ impl<T, U> Chip8<T, U>
         let mut memory = [0; 4096];
         populate_builtin_sprites(&mut memory);
 
+        let (thread_tx, main_rx) = mpsc::channel();
+
+        thread::spawn(move || {
+            let rate = Duration::from_millis(16); // 60Hz
+            loop {
+                thread::sleep(rate);
+                thread_tx.send(TimeQuantum).unwrap();
+            }
+        });
+
         Chip8 {
             memory: memory,
             registers: [0; 16],
@@ -54,8 +70,10 @@ impl<T, U> Chip8<T, U>
             index: 0,
             stack: [0; 16],
             stack_ptr: 0,
+
             delay_timer: 0,
             sound_timer: 0,
+            rx_async_time: main_rx,
 
             screen: None,
             keyboard: None,
@@ -105,12 +123,14 @@ impl<T, U> Chip8<T, U>
         self.pc += 2;
 
         // Decrement timers
-        if self.sound_timer > 0 {
-            self.sound_timer -= 1;
-        }
+        while let Ok(_) = self.rx_async_time.try_recv() {
+            if self.sound_timer > 0 {
+                self.sound_timer -= 1;
+            }
 
-        if self.delay_timer > 0 {
-            self.delay_timer -= 1;
+            if self.delay_timer > 0 {
+                self.delay_timer -= 1;
+            }
         }
 
         // Draw using the screen
@@ -122,7 +142,7 @@ impl<T, U> Chip8<T, U>
     }
 
     pub fn run(&mut self) {
-        let rate = Duration::new(0, 500); // 1/s
+        let rate = Duration::from_millis(10); // 1/s
         loop {
             let now = time::Instant::now();
 
@@ -131,8 +151,9 @@ impl<T, U> Chip8<T, U>
                 break;
             }
 
-            if now.elapsed() < rate {
-                thread::sleep(rate - now.elapsed());
+            let time_now = now.elapsed();
+            if time_now < rate {
+                thread::sleep(rate - time_now);
             }
         }
     }
@@ -262,8 +283,8 @@ impl<T, U> Chip8<T, U>
 
                     for (bit_pos, bit) in bits.iter().enumerate() {
                         // Get positions
-                        let x_pos = (self.registers[regx as usize]) + (bit_pos as u8);
-                        let y_pos = (self.registers[regy as usize]) + (idx as u8);
+                        let x_pos = (self.registers[regx as usize]).wrapping_add((bit_pos as u8));
+                        let y_pos = (self.registers[regy as usize]).wrapping_add((idx as u8));
 
                         // Get value
                         let val = *bit == 1;
@@ -276,6 +297,11 @@ impl<T, U> Chip8<T, U>
 
                 if let Some(ref mut screen) = self.screen {
                     let collision = screen.set_pixel_data(&pixel_data[..]);
+                    if collision {
+                        self.registers[0xF] = 1;
+                    } else {
+                        self.registers[0xF] = 0;
+                    }
                 }
             }
             Instruction::SkipEqKey(reg) => {
