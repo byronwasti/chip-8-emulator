@@ -42,6 +42,7 @@ pub enum Instruction {
     ReadRegs(Register),
 }
 
+#[derive(Debug)]
 pub struct OpCode {
     opcode: u16,
 }

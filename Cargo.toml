@@ -4,6 +4,8 @@ name = "chip8-emulator"
 version = "0.1.0"
 
 [dependencies]
+log = "0.4.0"
+log4rs = "0.8.0"
 rand = "0.3.17"
 structopt = "0.1.6"
 structopt-derive = "0.1.6"

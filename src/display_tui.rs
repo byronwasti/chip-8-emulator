@@ -63,6 +63,7 @@ impl Chip8Disp for TuiDisplay {
         let mut return_val = false;
         for (_, pixel) in data.iter().enumerate() {
             if pixel.x >= 64 || pixel.y >= 32 {
+                warn!("Invalid pixel value: {:?}", pixel);
                 continue;
             }
 

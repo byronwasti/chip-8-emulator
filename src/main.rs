@@ -2,6 +2,10 @@ extern crate chip8_emulator;
 extern crate structopt;
 
 #[macro_use]
+extern crate log;
+extern crate log4rs;
+
+#[macro_use]
 extern crate structopt_derive;
 
 use std::io::Read;
@@ -19,6 +23,9 @@ struct Cli {
 }
 
 fn main() {
+    log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
+
+    info!("Prog Start");
     let cli = Cli::from_args();
     let mut chip8: Chip8<TuiDisplay, KeyboardStdin> = Chip8::new();
 
@@ -36,6 +43,7 @@ fn main() {
     chip8.connect_display(display);
 
     // Run indefinitely
+    info!("Run");
     chip8.run();
 }
 

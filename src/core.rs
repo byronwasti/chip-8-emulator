@@ -90,6 +90,7 @@ impl<T, U> Chip8<T, U>
 
     pub fn upload_rom(&mut self, program: &[u8]) -> Result<(), String> {
         if program.len() > (4096 - 0x200) {
+            error!("Invalid program length");
             return Err("Invalid program length!".to_string());
         }
 
@@ -103,6 +104,7 @@ impl<T, U> Chip8<T, U>
         if let Some(ref mut keyboard) = self.keyboard {
             let quit = keyboard.poll();
             if quit {
+                info!("Keyboard quit");
                 return quit;
             }
         }
@@ -112,15 +114,13 @@ impl<T, U> Chip8<T, U>
                                self.memory[(self.pc + 1) as usize] ];
         let opcode = OpCode::new(&bytes);
 
-
         // Ignore error instructions for now
         if let Ok(instruction) = opcode.to_instruction() {
             //println!("pc: {}, op: {:?}", self.pc, opcode.to_instruction());
             self.handle_instruction(instruction);
+        } else {
+            warn!("Invalid instruction: {:?}", opcode);
         }
-
-        // Increment our program counter
-        self.pc += 2;
 
         // Decrement timers
         while let Ok(_) = self.rx_async_time.try_recv() {
@@ -165,47 +165,63 @@ impl<T, U> Chip8<T, U>
                 if let Some(ref mut screen) = self.screen {
                     screen.clear();
                 }
+
+                self.pc += 2;
             }
             Instruction::Return => {
+                self.pc = self.stack[self.stack_ptr as usize] + 2;
                 self.stack_ptr -= 1;
-                self.pc = self.stack[self.stack_ptr as usize];
             }
-            Instruction::Jump(addr) => self.pc = addr - 2,
+            Instruction::Jump(addr) => self.pc = addr,
             Instruction::Call(addr) => {
-                self.stack[self.stack_ptr as usize] = self.pc;
-                self.pc = addr - 2;
                 self.stack_ptr += 1;
+                self.stack[self.stack_ptr as usize] = self.pc;
+                self.pc = addr;
             }
             Instruction::SkipEqI(reg, byte) => {
                 if self.registers[reg as usize] == byte {
-                    self.pc += 2
+                    self.pc += 4;
+                } else {
+                    self.pc += 2;
                 }
             }
             Instruction::SkipNeqI(reg, byte) => {
                 if self.registers[reg as usize] != byte { 
-                    self.pc += 2
+                    self.pc += 4;
+                } else {
+                    self.pc += 2;
                 }
             }
             Instruction::SkipEq(regx, regy) => {
                 if self.registers[regx as usize] == self.registers[regy as usize] {
-                    self.pc += 2
+                    self.pc += 4;
+                } else {
+                    self.pc += 2;
                 }
             }
-            Instruction::LoadI(reg, byte) => self.registers[reg as usize] = byte,
+            Instruction::LoadI(reg, byte) => {
+                self.registers[reg as usize] = byte;
+                self.pc += 2;
+            }
             Instruction::AddI(reg, byte) => {
                 self.registers[reg as usize] = self.registers[reg as usize].wrapping_add(byte);
+                self.pc += 2;
             }
             Instruction::LoadR(regx, regy) => {
                 self.registers[regx as usize] = self.registers[regy as usize];
+                self.pc += 2;
             }
             Instruction::Or(regx, regy) => {
                 self.registers[regx as usize] |= self.registers[regy as usize];
+                self.pc += 2;
             }
             Instruction::And(regx, regy) => {
                 self.registers[regx as usize] &= self.registers[regy as usize];
+                self.pc += 2;
             }
             Instruction::Xor(regx, regy) => {
                 self.registers[regx as usize] ^= self.registers[regy as usize];
+                self.pc += 2;
             }
             Instruction::Add(regx, regy) => {
                 let x_val = self.registers[regx as usize];
@@ -218,6 +234,7 @@ impl<T, U> Chip8<T, U>
                 }
 
                 self.registers[regx as usize] = temp as u8;
+                self.pc += 2;
             }
             Instruction::Sub(regx, regy) => {
                 {// Set VF first 
@@ -234,10 +251,12 @@ impl<T, U> Chip8<T, U>
                 // Apply subtraction
                 self.registers[regx as usize] = self.registers[regx as usize]
                     .wrapping_sub(self.registers[regy as usize]);
+                self.pc += 2;
             }
             Instruction::ShiftR(reg) => {
                 self.registers[0xF] = self.registers[reg as usize] & 0b1;
                 self.registers[reg as usize] >>= 1;
+                self.pc += 2;
             }
             Instruction::SubN(regx, regy) => {
                 {// Set VF first
@@ -253,20 +272,30 @@ impl<T, U> Chip8<T, U>
 
                 self.registers[regx as usize] = self.registers[regy as usize]
                     .wrapping_sub(self.registers[regx as usize]);
+                self.pc += 2;
             }
             Instruction::ShiftL(reg) => {
                 self.registers[0xF] = self.registers[reg as usize] & 0b1000_0000;
                 self.registers[reg as usize] <<= 1;
+                self.pc += 2;
             }
             Instruction::SkipNeq(regx, regy) => {
                 if self.registers[regx as usize] != self.registers[regy as usize] {
-                    self.pc += 2
+                    self.pc += 4;
+                } else {
+                    self.pc += 2;
                 }
             }
-            Instruction::LoadIdx(addr) => self.index = addr,
-            Instruction::JumpAddV0(addr) => self.pc = addr - 2 + self.registers[0x0] as u16,
+            Instruction::LoadIdx(addr) => {
+                self.index = addr;
+                self.pc += 2;
+            }
+            Instruction::JumpAddV0(addr) => {
+                self.pc = addr + self.registers[0x0] as u16;
+            }
             Instruction::Rand(reg, byte) => {
                 self.registers[reg as usize] = rand::random::<u8>() & byte;
+                self.pc += 2;
             }
             Instruction::Draw(regx, regy, nib) => {
                 let mut pixel_data = Vec::new();
@@ -281,7 +310,7 @@ impl<T, U> Chip8<T, U>
                         bits[i] = (line >> i) & 1;
                     }
 
-                    for (bit_pos, bit) in bits.iter().enumerate() {
+                    for (bit_pos, bit) in bits.iter().rev().enumerate() {
                         // Get positions
                         let x_pos = (self.registers[regx as usize]).wrapping_add((bit_pos as u8));
                         let y_pos = (self.registers[regy as usize]).wrapping_add((idx as u8));
@@ -303,49 +332,72 @@ impl<T, U> Chip8<T, U>
                         self.registers[0xF] = 0;
                     }
                 }
+
+                self.pc += 2;
             }
             Instruction::SkipEqKey(reg) => {
+                let mut skip = false;
                 if let Ok(key) = Chip8Key::new(reg) {
                     if let Some(ref mut keyboard) = self.keyboard {
                         if let Some(key_pressed) = keyboard.key_pressed() {
                             if key == key_pressed {
-                                self.pc += 2;
+                                skip = true;
                             }
                         }
                     }
                 }
+
+                if skip {
+                    self.pc += 4;
+                } else {
+                    self.pc += 2;
+                }
             }
             Instruction::SkipNeqKey(reg) => {
+                let mut skip = false;
                 if let Ok(key) = Chip8Key::new(reg) {
                     if let Some(ref mut keyboard) = self.keyboard {
                         if let Some(key_pressed) = keyboard.key_pressed() {
                             if key != key_pressed {
-                                self.pc += 2;
+                                skip = true;
                             }
                         }
                     }
                 }
-            }
-            Instruction::LoadFromDT(reg) => self.registers[reg as usize] = self.delay_timer,
-            Instruction::LoadKey(reg) => {
 
+                if skip {
+                    self.pc += 4;
+                } else {
+                    self.pc += 2;
+                }
+            }
+            Instruction::LoadFromDT(reg) => {
+                self.registers[reg as usize] = self.delay_timer;
+                self.pc += 2;
+            }
+            Instruction::LoadKey(reg) => {
                 if let Some(ref mut keyboard) = self.keyboard {
                     if let Some(key_pressed) = keyboard.key_pressed() {
                         self.registers[reg as usize] = key_pressed as u8;
-                    } else {
-                        // Decrement PC so that we stay on this instruction
-                        // until a key has been pressed.
-                        self.pc -= 2;
+                        self.pc += 2;
                     }
                 }
             }
-            Instruction::SetDT(reg) => self.delay_timer = self.registers[reg as usize],
-            Instruction::SetST(reg) => self.sound_timer = self.registers[reg as usize],
+            Instruction::SetDT(reg) => {
+                self.delay_timer = self.registers[reg as usize];
+                self.pc += 2;
+            }
+            Instruction::SetST(reg) => {
+                self.sound_timer = self.registers[reg as usize];
+                self.pc += 2;
+            }
             Instruction::AddIdx(reg) => {
-                self.index = self.index.wrapping_add(self.registers[reg as usize] as u16)
+                self.index = self.index.wrapping_add(self.registers[reg as usize] as u16);
+                self.pc += 2;
             }
             Instruction::LoadSprite(reg) => {
                 self.index = (self.registers[reg as usize] * 5) as u16;
+                self.pc += 2;
             }
             Instruction::LoadBCD(reg) => {
                 let mut reg = self.registers[reg as usize];
@@ -355,16 +407,22 @@ impl<T, U> Chip8<T, U>
                     self.memory[(self.index + idx) as usize] = val;
                     reg = (reg - val)/10;
                 }
+
+                self.pc += 2;
             }
             Instruction::StoreRegs(reg) => {
                 for idx in 0..reg {
                     self.memory[(self.index + idx as u16) as usize] = self.registers[idx as usize];
                 }
+
+                self.pc += 2;
             }
             Instruction::ReadRegs(reg) => {
                 for idx in 0..reg {
                     self.registers[idx as usize] = self.memory[(self.index + idx as u16) as usize];
                 }
+
+                self.pc += 2;
             }
         }
     }
