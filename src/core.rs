@@ -1,12 +1,9 @@
 use rand;
 use std::{thread, time};
 use std::time::Duration;
-use std::sync::mpsc;
 
 use opcode::{OpCode, Instruction};
 use peripherals::{Chip8Disp, Chip8Input, PixelData, Chip8Key};
-
-struct TimeQuantum;
 
 pub struct Chip8<T: Chip8Disp, U: Chip8Input>  {
     memory: [u8; 4096],
@@ -19,7 +16,6 @@ pub struct Chip8<T: Chip8Disp, U: Chip8Input>  {
     // Timers
     delay_timer: u8,
     sound_timer: u8,
-    rx_async_time: mpsc::Receiver<TimeQuantum>,
 
     // Peripherals
     screen: Option<T>,
@@ -53,16 +49,6 @@ impl<T, U> Chip8<T, U>
         let mut memory = [0; 4096];
         populate_builtin_sprites(&mut memory);
 
-        let (thread_tx, main_rx) = mpsc::channel();
-
-        thread::spawn(move || {
-            let rate = Duration::from_millis(16); // 60Hz
-            loop {
-                thread::sleep(rate);
-                thread_tx.send(TimeQuantum).unwrap();
-            }
-        });
-
         Chip8 {
             memory: memory,
             registers: [0; 16],
@@ -73,7 +59,6 @@ impl<T, U> Chip8<T, U>
 
             delay_timer: 0,
             sound_timer: 0,
-            rx_async_time: main_rx,
 
             screen: None,
             keyboard: None,
@@ -99,7 +84,7 @@ impl<T, U> Chip8<T, U>
         Ok(())
     }
     
-    pub fn cycle_once(&mut self) -> bool {
+    fn cycle_once(&mut self) -> bool {
         // Poll keyboard to allow it to update inputs
         if let Some(ref mut keyboard) = self.keyboard {
             let quit = keyboard.poll();
@@ -116,33 +101,28 @@ impl<T, U> Chip8<T, U>
 
         // Ignore error instructions for now
         if let Ok(instruction) = opcode.to_instruction() {
-            //println!("pc: {}, op: {:?}", self.pc, opcode.to_instruction());
+            debug!("pc: {}, instruction: {:?}", self.pc, instruction);
             self.handle_instruction(instruction);
+            debug!("Registers:
+                   reg: {:?}, index: {},
+                   stack: {:?}, stack_ptr: {},
+                   delay: {}, sound: {}\n", 
+                   self.registers, self.index, 
+                   self.stack, self.stack_ptr, 
+                   self.delay_timer, self.sound_timer);
         } else {
             warn!("Invalid instruction: {:?}", opcode);
-        }
-
-        // Decrement timers
-        while let Ok(_) = self.rx_async_time.try_recv() {
-            if self.sound_timer > 0 {
-                self.sound_timer -= 1;
-            }
-
-            if self.delay_timer > 0 {
-                self.delay_timer -= 1;
-            }
-        }
-
-        // Draw using the screen
-        if let Some(ref mut screen) = self.screen {
-            screen.draw();
         }
 
         false
     }
 
     pub fn run(&mut self) {
-        let rate = Duration::from_millis(10); // 1/s
+        let rate = Duration::from_millis(2); // 1/s
+
+        let timer_rate = Duration::from_millis(17);
+        let mut timers_time = time::Instant::now();
+
         loop {
             let now = time::Instant::now();
 
@@ -151,9 +131,22 @@ impl<T, U> Chip8<T, U>
                 break;
             }
 
-            let time_now = now.elapsed();
-            if time_now < rate {
-                thread::sleep(rate - time_now);
+            if timers_time.elapsed() > timer_rate {
+                timers_time = time::Instant::now();
+                // Decrement timers
+                if self.sound_timer > 0 {
+                    self.sound_timer -= 1;
+                }
+
+                if self.delay_timer > 0 {
+                    self.delay_timer -= 1;
+                }
+            }
+
+            let elapsed = now.elapsed();
+            if elapsed < rate {
+                debug!("Slept CPU");
+                thread::sleep(rate - elapsed);
             }
         }
     }
@@ -169,13 +162,15 @@ impl<T, U> Chip8<T, U>
                 self.pc += 2;
             }
             Instruction::Return => {
-                self.pc = self.stack[self.stack_ptr as usize] + 2;
                 self.stack_ptr -= 1;
+                self.pc = self.stack[self.stack_ptr as usize] + 2;
+                self.stack[self.stack_ptr as usize] = 0;
             }
             Instruction::Jump(addr) => self.pc = addr,
             Instruction::Call(addr) => {
-                self.stack_ptr += 1;
+                // Set stack to save current location
                 self.stack[self.stack_ptr as usize] = self.pc;
+                self.stack_ptr += 1;
                 self.pc = addr;
             }
             Instruction::SkipEqI(reg, byte) => {
@@ -229,28 +224,26 @@ impl<T, U> Chip8<T, U>
 
                 let mut temp = (x_val as u16) + (y_val as u16);
                 if temp > 0xFF {
-                    self.registers[15] = 1;
-                    temp = temp % 0xFF;
+                    self.registers[0xF] = 1;
+                    temp = temp & 0xFF;
                 }
 
                 self.registers[regx as usize] = temp as u8;
                 self.pc += 2;
             }
             Instruction::Sub(regx, regy) => {
-                {// Set VF first 
-                    let regx = self.registers[regx as usize];
-                    let regy = self.registers[regy as usize];
+                let x_val = self.registers[regx as usize];
+                let y_val = self.registers[regy as usize];
 
-                    if regx > regy {
-                        self.registers[0xF] = 1;
-                    } else {
-                        self.registers[0xF] = 0;
-                    }
+                if x_val > y_val {
+                    self.registers[0xF] = 1;
+                } else {
+                    self.registers[0xF] = 0;
                 }
     
                 // Apply subtraction
-                self.registers[regx as usize] = self.registers[regx as usize]
-                    .wrapping_sub(self.registers[regy as usize]);
+                let result = x_val.wrapping_sub(y_val);
+                self.registers[regx as usize] = result;
                 self.pc += 2;
             }
             Instruction::ShiftR(reg) => {
@@ -259,23 +252,22 @@ impl<T, U> Chip8<T, U>
                 self.pc += 2;
             }
             Instruction::SubN(regx, regy) => {
-                {// Set VF first
-                    let regx = self.registers[regx as usize];
-                    let regy = self.registers[regy as usize];
+                let x_val = self.registers[regx as usize];
+                let y_val = self.registers[regy as usize];
 
-                    if regy > regx {
-                        self.registers[0xF] = 1;
-                    } else {
-                        self.registers[0xF] = 0;
-                    }
+                if y_val > x_val {
+                    self.registers[0xF] = 1;
+                } else {
+                    self.registers[0xF] = 0;
                 }
-
-                self.registers[regx as usize] = self.registers[regy as usize]
-                    .wrapping_sub(self.registers[regx as usize]);
+    
+                // Apply subtraction
+                let result = y_val.wrapping_sub(x_val);
+                self.registers[regx as usize] = result;
                 self.pc += 2;
             }
             Instruction::ShiftL(reg) => {
-                self.registers[0xF] = self.registers[reg as usize] & 0b1000_0000;
+                self.registers[0xF] = self.registers[reg as usize] >> 7;
                 self.registers[reg as usize] <<= 1;
                 self.pc += 2;
             }
@@ -291,7 +283,7 @@ impl<T, U> Chip8<T, U>
                 self.pc += 2;
             }
             Instruction::JumpAddV0(addr) => {
-                self.pc = addr + self.registers[0x0] as u16;
+                self.pc = addr + (self.registers[0x0] as u16);
             }
             Instruction::Rand(reg, byte) => {
                 self.registers[reg as usize] = rand::random::<u8>() & byte;
@@ -331,6 +323,8 @@ impl<T, U> Chip8<T, U>
                     } else {
                         self.registers[0xF] = 0;
                     }
+
+                    screen.draw();
                 }
 
                 self.pc += 2;
@@ -396,29 +390,35 @@ impl<T, U> Chip8<T, U>
                 self.pc += 2;
             }
             Instruction::LoadSprite(reg) => {
-                self.index = (self.registers[reg as usize] * 5) as u16;
+                self.index = 5 * (self.registers[reg as usize] as u16);
                 self.pc += 2;
             }
             Instruction::LoadBCD(reg) => {
-                let mut reg = self.registers[reg as usize];
+                let val = self.registers[reg as usize];
                 
+                /*
                 for idx in (0..3).rev() {
                     let val = reg % 10;
                     self.memory[(self.index + idx) as usize] = val;
                     reg = (reg - val)/10;
                 }
+                */
+
+                self.memory[(self.index + 0) as usize] = val / 100;
+                self.memory[(self.index + 1) as usize] = (val / 10) % 10;
+                self.memory[(self.index + 2) as usize] = (val % 100) % 10;
 
                 self.pc += 2;
             }
             Instruction::StoreRegs(reg) => {
-                for idx in 0..reg {
+                for idx in 0..(reg+1) {
                     self.memory[(self.index + idx as u16) as usize] = self.registers[idx as usize];
                 }
 
                 self.pc += 2;
             }
             Instruction::ReadRegs(reg) => {
-                for idx in 0..reg {
+                for idx in 0..(reg+1) {
                     self.registers[idx as usize] = self.memory[(self.index + idx as u16) as usize];
                 }
 

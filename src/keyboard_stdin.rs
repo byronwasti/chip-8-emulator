@@ -59,6 +59,7 @@ impl KeyboardStdin {
                             'r' => thread_tx.send(AsyncMsg::KeyInput(KeyD)).unwrap(),
                             'f' => thread_tx.send(AsyncMsg::KeyInput(KeyE)).unwrap(),
                             'v' => thread_tx.send(AsyncMsg::KeyInput(KeyF)).unwrap(),
+                            'm' => debug!("Manual Debug Marker"),
                             _ => {},
                         }
                     }

@@ -1,3 +1,4 @@
+use std::fmt;
 use tui::Terminal;
 use tui::backend::TermionBackend;
 use tui::widgets::{Widget, Block, border};
@@ -10,6 +11,22 @@ use peripherals::{Chip8Disp, PixelData};
 pub struct TuiDisplay {
     terminal: Terminal<TermionBackend>,
     data: [[bool; 64]; 32],
+}
+
+impl fmt::Display for TuiDisplay {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for y in self.data.iter() {
+            for x in y.iter() {
+                if *x {
+                    write!(f, "X")?;
+                } else {
+                    write!(f, "_")?;
+                }
+            }
+            write!(f, "\n")?;
+        }
+        write!(f, "End")
+    }
 }
 
 impl TuiDisplay {
@@ -27,6 +44,8 @@ impl TuiDisplay {
 
 impl Chip8Disp for TuiDisplay {
     fn draw(&mut self) {
+        debug!("Display:\n{}", &self);
+
         let mut points = Vec::new();
         for (y, line) in self.data.iter().enumerate() {
             let y = self.data.len() - y - 1;
@@ -48,7 +67,7 @@ impl Chip8Disp for TuiDisplay {
                     .paint(|ctx| {
                         ctx.draw(&Points {
                             coords: &points[..],
-                            color: Color::Red,
+                            color: Color::White,
                         });
                     })
                     .x_bounds([0.0, 64.0])
