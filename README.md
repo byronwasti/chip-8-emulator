@@ -6,15 +6,19 @@ This project contains a Chip-8 Emulator written entirely in Rust. The goal of th
 The project is currently a work in progress, and a few instructions are waiting to be implemented. Major things that are waiting to be completed are listed below.
 
 Image of TicTac being played:
+
 ![image](screenshots/tic_tac.png)
 
 Image of Brix being played:
+
 ![image](screenshots/brix.png)
 
 Image of Space Invaders intro:
+
 ![image](screenshots/space_invaders_intro.png)
 
 Image of Space Invaders being played:
+
 ![image](screenshots/space_invaders_play1.png)
 
 ## Usage
