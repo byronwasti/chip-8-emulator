@@ -83,6 +83,7 @@ impl Chip8Disp for Display {
 
 pub struct Keyboard {
     key_pressed: Option<Chip8Key>,
+    keys_pressed: [bool; 16],
 
     event_pump: sdl2::EventPump,
 }
@@ -92,7 +93,30 @@ impl Keyboard {
         let event_pump = sdl_context.event_pump().unwrap();
         Keyboard { 
             key_pressed: None,
+            keys_pressed: [false; 16],
             event_pump: event_pump,
+        }
+    }
+
+    fn sdl_key_as_chip8key(sdl_key: Keycode) -> Option<Chip8Key> {
+        match sdl_key {
+            Keycode::Num1 => Some(Chip8Key::Key1),
+            Keycode::Num2 => Some(Chip8Key::Key2),
+            Keycode::Num3 => Some(Chip8Key::Key3),
+            Keycode::Q => Some(Chip8Key::Key4),
+            Keycode::W => Some(Chip8Key::Key5),
+            Keycode::E => Some(Chip8Key::Key6),
+            Keycode::A => Some(Chip8Key::Key7),
+            Keycode::S => Some(Chip8Key::Key8),
+            Keycode::D => Some(Chip8Key::Key9),
+            Keycode::X => Some(Chip8Key::Key0),
+            Keycode::Z => Some(Chip8Key::KeyA),
+            Keycode::C => Some(Chip8Key::KeyB),
+            Keycode::Num4 => Some(Chip8Key::KeyC),
+            Keycode::R => Some(Chip8Key::KeyD),
+            Keycode::F => Some(Chip8Key::KeyE),
+            Keycode::V => Some(Chip8Key::KeyF),
+            _ => None,
         }
     }
 }
@@ -111,53 +135,28 @@ impl Chip8Input for Keyboard {
                 }
 
                 Event::KeyDown { keycode: Some(key), .. } => {
-                    let chip8_key = match key {
-                        Keycode::Num1 => Some(Chip8Key::Key1),
-                        Keycode::Num2 => Some(Chip8Key::Key2),
-                        Keycode::Num3 => Some(Chip8Key::Key3),
-                        Keycode::Q => Some(Chip8Key::Key4),
-                        Keycode::W => Some(Chip8Key::Key5),
-                        Keycode::E => Some(Chip8Key::Key6),
-                        Keycode::A => Some(Chip8Key::Key7),
-                        Keycode::S => Some(Chip8Key::Key8),
-                        Keycode::D => Some(Chip8Key::Key9),
-                        Keycode::X => Some(Chip8Key::Key0),
-                        Keycode::Z => Some(Chip8Key::KeyA),
-                        Keycode::C => Some(Chip8Key::KeyB),
-                        Keycode::Num4 => Some(Chip8Key::KeyC),
-                        Keycode::R => Some(Chip8Key::KeyD),
-                        Keycode::F => Some(Chip8Key::KeyE),
-                        Keycode::V => Some(Chip8Key::KeyF),
-                        _ => None,
-                    };
-
+                    let chip8_key = Keyboard::sdl_key_as_chip8key(key);
                     self.key_pressed = chip8_key;
+
+                    if let Some(key) = chip8_key {
+                        self.keys_pressed[key as usize] = true;
+                    }
+
+                    info!("Key State: {:?}", self.keys_pressed);
                 }
 
                 Event::KeyUp { keycode: Some(key), .. } => {
-                    let chip8_key = match key {
-                        Keycode::Num1 => Some(Chip8Key::Key1),
-                        Keycode::Num2 => Some(Chip8Key::Key2),
-                        Keycode::Num3 => Some(Chip8Key::Key3),
-                        Keycode::Q => Some(Chip8Key::Key4),
-                        Keycode::W => Some(Chip8Key::Key5),
-                        Keycode::E => Some(Chip8Key::Key6),
-                        Keycode::A => Some(Chip8Key::Key7),
-                        Keycode::S => Some(Chip8Key::Key8),
-                        Keycode::D => Some(Chip8Key::Key9),
-                        Keycode::X => Some(Chip8Key::Key0),
-                        Keycode::Z => Some(Chip8Key::KeyA),
-                        Keycode::C => Some(Chip8Key::KeyB),
-                        Keycode::Num4 => Some(Chip8Key::KeyC),
-                        Keycode::R => Some(Chip8Key::KeyD),
-                        Keycode::F => Some(Chip8Key::KeyE),
-                        Keycode::V => Some(Chip8Key::KeyF),
-                        _ => None,
-                    };
+                    let chip8_key = Keyboard::sdl_key_as_chip8key(key);
 
                     if self.key_pressed == chip8_key {
                         self.key_pressed = None;
                     }
+
+                    if let Some(key) = chip8_key {
+                        self.keys_pressed[key as usize] = false;
+                    }
+
+                    info!("Key State: {:?}", self.keys_pressed);
                 }
 
                 _ => {}
