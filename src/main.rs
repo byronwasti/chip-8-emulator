@@ -1,5 +1,6 @@
 extern crate chip8_emulator;
 extern crate structopt;
+extern crate sdl2;
 
 #[macro_use]
 extern crate log;
@@ -13,8 +14,7 @@ use std::fs::File;
 
 use structopt::StructOpt;
 use chip8_emulator::core::Chip8;
-use chip8_emulator::display_tui::TuiDisplay;
-use chip8_emulator::keyboard_stdin::KeyboardStdin;
+use chip8_emulator::sdl2_peripherals::{Display, Keyboard};
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "fancify")]
@@ -27,7 +27,7 @@ fn main() {
 
     info!("Prog Start");
     let cli = Cli::from_args();
-    let mut chip8: Chip8<TuiDisplay, KeyboardStdin> = Chip8::new();
+    let mut chip8 = Chip8::new();
 
     // Load program from file & upload to core
     let mut file = File::open(cli.source).expect("Invalid filename");
@@ -36,10 +36,10 @@ fn main() {
     chip8.upload_rom(&program).expect("Invalid program length");
 
     // Set up chip8 core with peripherals
-    let keyboard = KeyboardStdin::new();
+    let sdl_context = sdl2::init().unwrap();
+    let display = Display::new(&sdl_context);
+    let keyboard = Keyboard::new(&sdl_context);
     chip8.connect_keyboard(keyboard);
-
-    let display = TuiDisplay::new();
     chip8.connect_display(display);
 
     // Run indefinitely

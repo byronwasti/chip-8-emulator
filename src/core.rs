@@ -304,13 +304,15 @@ impl<T, U> Chip8<T, U>
 
                     for (bit_pos, bit) in bits.iter().rev().enumerate() {
                         // Get positions
-                        let x_pos = (self.registers[regx as usize]).wrapping_add((bit_pos as u8));
-                        let y_pos = (self.registers[regy as usize]).wrapping_add((idx as u8));
+                        let x_pos = self.registers[regx as usize] + (bit_pos as u8);
+                        let y_pos = self.registers[regy as usize] + (idx as u8);
 
                         // Get value
                         let val = *bit == 1;
 
-                        let pixel = PixelData{ x: x_pos as usize, y: y_pos as usize, val: val };
+                        let pixel = PixelData{ x: x_pos as usize, 
+                                               y: y_pos as usize, 
+                                               val: val };
                         
                         pixel_data.push(pixel);
                     }
