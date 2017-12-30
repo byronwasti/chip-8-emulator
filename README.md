@@ -28,17 +28,14 @@ $ cargo run --release -- $ROM_NAME
 ## Completed
 - Chip-8 memory pattern
 - Opcode interpretation
-- Basic instructions are implemented (math/load registers/jumps)
-- Basic understanding of how to work with tui-rs
+- Running instructions
 - Keyboard input and emulation
 - Emulate display and collision detection
-- Draw Chip-8 display data to the terminal using tui-rs
+- Display data using sdl2
 - Logging
 
 ## TODO
+- Rework the error system
 - Add unit tests
 - Add integration tests
-- Rework the error system to use enumerated error messages
-- Visualization of registers using tui-rs
-
 

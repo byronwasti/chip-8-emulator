@@ -6,7 +6,7 @@ appenders:
         kind: file
         path: "log/chip8.log"
 root:
-    level: info
+    level: warn
     appenders:
         - stdout
 loggers:

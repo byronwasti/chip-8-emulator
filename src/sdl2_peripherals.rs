@@ -145,8 +145,6 @@ impl Chip8Input for Keyboard {
                     if let Some(key) = chip8_key {
                         self.keys_pressed[key as usize] = true;
                     }
-
-                    info!("Key State: {:?}", self.keys_pressed);
                 }
 
                 Event::KeyUp { keycode: Some(key), .. } => {
@@ -159,8 +157,6 @@ impl Chip8Input for Keyboard {
                     if let Some(key) = chip8_key {
                         self.keys_pressed[key as usize] = false;
                     }
-
-                    info!("Key State: {:?}", self.keys_pressed);
                 }
 
                 _ => {}
