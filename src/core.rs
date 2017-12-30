@@ -333,13 +333,9 @@ impl<T, U> Chip8<T, U>
             }
             Instruction::SkipEqKey(reg) => {
                 let mut skip = false;
-                if let Ok(key) = Chip8Key::new(reg) {
+                if let Ok(key) = Chip8Key::new(self.registers[reg as usize]) {
                     if let Some(ref mut keyboard) = self.keyboard {
-                        if let Some(key_pressed) = keyboard.key_pressed() {
-                            if key == key_pressed {
-                                skip = true;
-                            }
-                        }
+                        skip = keyboard.key_pressed(key);
                     }
                 }
 
@@ -351,13 +347,9 @@ impl<T, U> Chip8<T, U>
             }
             Instruction::SkipNeqKey(reg) => {
                 let mut skip = false;
-                if let Ok(key) = Chip8Key::new(reg) {
+                if let Ok(key) = Chip8Key::new(self.registers[reg as usize]) {
                     if let Some(ref mut keyboard) = self.keyboard {
-                        if let Some(key_pressed) = keyboard.key_pressed() {
-                            if key != key_pressed {
-                                skip = true;
-                            }
-                        }
+                        skip = !keyboard.key_pressed(key);
                     }
                 }
 
@@ -373,7 +365,7 @@ impl<T, U> Chip8<T, U>
             }
             Instruction::LoadKey(reg) => {
                 if let Some(ref mut keyboard) = self.keyboard {
-                    if let Some(key_pressed) = keyboard.key_pressed() {
+                    if let Some(key_pressed) = keyboard.last_key_pressed() {
                         self.registers[reg as usize] = key_pressed as u8;
                         self.pc += 2;
                     }

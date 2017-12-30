@@ -82,7 +82,7 @@ impl Chip8Disp for Display {
 
 
 pub struct Keyboard {
-    key_pressed: Option<Chip8Key>,
+    last_key_pressed: Option<Chip8Key>,
     keys_pressed: [bool; 16],
 
     event_pump: sdl2::EventPump,
@@ -92,7 +92,7 @@ impl Keyboard {
     pub fn new(sdl_context: &sdl2::Sdl) -> Keyboard {
         let event_pump = sdl_context.event_pump().unwrap();
         Keyboard { 
-            key_pressed: None,
+            last_key_pressed: None,
             keys_pressed: [false; 16],
             event_pump: event_pump,
         }
@@ -122,8 +122,12 @@ impl Keyboard {
 }
 
 impl Chip8Input for Keyboard {
-    fn key_pressed(&self) -> Option<Chip8Key> {
-        self.key_pressed
+    fn last_key_pressed(&self) -> Option<Chip8Key> {
+        self.last_key_pressed
+    }
+
+    fn key_pressed(&self, key: Chip8Key) -> bool {
+        self.keys_pressed[key as usize]
     }
 
     fn poll(&mut self) -> bool {
@@ -136,7 +140,7 @@ impl Chip8Input for Keyboard {
 
                 Event::KeyDown { keycode: Some(key), .. } => {
                     let chip8_key = Keyboard::sdl_key_as_chip8key(key);
-                    self.key_pressed = chip8_key;
+                    self.last_key_pressed = chip8_key;
 
                     if let Some(key) = chip8_key {
                         self.keys_pressed[key as usize] = true;
@@ -148,8 +152,8 @@ impl Chip8Input for Keyboard {
                 Event::KeyUp { keycode: Some(key), .. } => {
                     let chip8_key = Keyboard::sdl_key_as_chip8key(key);
 
-                    if self.key_pressed == chip8_key {
-                        self.key_pressed = None;
+                    if self.last_key_pressed == chip8_key {
+                        self.last_key_pressed = None;
                     }
 
                     if let Some(key) = chip8_key {

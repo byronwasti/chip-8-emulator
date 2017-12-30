@@ -8,7 +8,8 @@ pub trait Chip8Disp {
 }
 
 pub trait Chip8Input {
-    fn key_pressed(&self) -> Option<Chip8Key>;
+    fn last_key_pressed(&self) -> Option<Chip8Key>;
+    fn key_pressed(&self, key: Chip8Key) -> bool;
     fn poll(&mut self) -> bool;
 }
 
