@@ -1,7 +1,7 @@
-type Address = u16;
-type Register = u8;
-type Immediate = u8;
-type Nibble = u8;
+pub type Register = u8;
+pub type Address = u16;
+pub type Immediate = u8;
+pub type Nibble = u8;
 
 #[derive(Debug)]
 pub enum Instruction {

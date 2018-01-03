@@ -2,25 +2,8 @@ use rand;
 use std::{thread, time};
 use std::time::Duration;
 
-use opcode::{OpCode, Instruction};
+use opcode::{OpCode, Instruction, Register};
 use peripherals::{Chip8Disp, Chip8Input, PixelData, Chip8Key};
-
-pub struct Chip8<T: Chip8Disp, U: Chip8Input>  {
-    memory: [u8; 4096],
-    registers: [u8; 16],
-    pc: u16,
-    index: u16,
-    stack: [u16; 16],
-    stack_ptr: u8,
-
-    // Timers
-    delay_timer: u8,
-    sound_timer: u8,
-
-    // Peripherals
-    screen: Option<T>,
-    keyboard: Option<U>,
-}
 
 fn populate_builtin_sprites(memory: &mut [u8; 4096]) {
     memory[..(5*16)].copy_from_slice(&[
@@ -43,6 +26,48 @@ fn populate_builtin_sprites(memory: &mut [u8; 4096]) {
         ]);
 }
 
+#[derive(Debug)]
+struct Registers {
+    registers: [u8; 16],
+}
+
+impl Registers {
+    pub fn new() -> Registers {
+        Registers {
+            registers: [0; 16],
+        }
+    }
+
+    pub fn get(&self, reg: Register) -> u8 {
+        self.registers[reg as usize]
+    }
+
+    pub fn set(&mut self, reg: Register, value: u8) {
+        self.registers[reg as usize] = value;
+    }
+
+    pub fn set_0xf(&mut self, value: u8) {
+        self.registers[0xF] = value;
+    }
+}
+
+pub struct Chip8<T: Chip8Disp, U: Chip8Input>  {
+    memory: [u8; 4096],
+    registers: Registers,
+    pc: u16,
+    index: u16,
+    stack: [u16; 16],
+    stack_ptr: u8,
+
+    // Timers
+    delay_timer: u8,
+    sound_timer: u8,
+
+    // Peripherals
+    screen: Option<T>,
+    keyboard: Option<U>,
+}
+
 impl<T, U> Chip8<T, U>  
     where T: Chip8Disp, U: Chip8Input {
     pub fn new() -> Chip8<T, U> {
@@ -51,7 +76,7 @@ impl<T, U> Chip8<T, U>
 
         Chip8 {
             memory: memory,
-            registers: [0; 16],
+            registers: Registers::new(),
             pc: 0x200,
             index: 0,
             stack: [0; 16],
@@ -174,105 +199,116 @@ impl<T, U> Chip8<T, U>
                 self.pc = addr;
             }
             Instruction::SkipEqI(reg, byte) => {
-                if self.registers[reg as usize] == byte {
+                if self.registers.get(reg) == byte {
                     self.pc += 4;
                 } else {
                     self.pc += 2;
                 }
             }
             Instruction::SkipNeqI(reg, byte) => {
-                if self.registers[reg as usize] != byte { 
+                if self.registers.get(reg) != byte { 
                     self.pc += 4;
                 } else {
                     self.pc += 2;
                 }
             }
             Instruction::SkipEq(regx, regy) => {
-                if self.registers[regx as usize] == self.registers[regy as usize] {
+                if self.registers.get(regx) == self.registers.get(regy) {
                     self.pc += 4;
                 } else {
                     self.pc += 2;
                 }
             }
             Instruction::LoadI(reg, byte) => {
-                self.registers[reg as usize] = byte;
+                self.registers.set(reg, byte);
                 self.pc += 2;
             }
             Instruction::AddI(reg, byte) => {
-                self.registers[reg as usize] = self.registers[reg as usize].wrapping_add(byte);
+                let val = self.registers.get(reg).wrapping_add(byte);
+                self.registers.set(reg, val);
                 self.pc += 2;
             }
             Instruction::LoadR(regx, regy) => {
-                self.registers[regx as usize] = self.registers[regy as usize];
+                let val = self.registers.get(regy);
+                self.registers.set(regx, val);
                 self.pc += 2;
             }
             Instruction::Or(regx, regy) => {
-                self.registers[regx as usize] |= self.registers[regy as usize];
+                let val = self.registers.get(regx) | self.registers.get(regy);
+                self.registers.set(regx, val);
                 self.pc += 2;
             }
             Instruction::And(regx, regy) => {
-                self.registers[regx as usize] &= self.registers[regy as usize];
+                let val = self.registers.get(regx) & self.registers.get(regy);
+                self.registers.set(regx, val);
                 self.pc += 2;
             }
             Instruction::Xor(regx, regy) => {
-                self.registers[regx as usize] ^= self.registers[regy as usize];
+                let val = self.registers.get(regx) ^ self.registers.get(regy);
+                self.registers.set(regx, val);
                 self.pc += 2;
             }
             Instruction::Add(regx, regy) => {
-                let x_val = self.registers[regx as usize];
-                let y_val = self.registers[regy as usize];
+                let x_val = self.registers.get(regx);
+                let y_val = self.registers.get(regy);
 
                 let mut temp = (x_val as u16) + (y_val as u16);
                 if temp > 0xFF {
-                    self.registers[0xF] = 1;
+                    self.registers.set_0xf(1);
                     temp = temp & 0xFF;
                 }
 
-                self.registers[regx as usize] = temp as u8;
+                self.registers.set(regx, temp as u8);
                 self.pc += 2;
             }
             Instruction::Sub(regx, regy) => {
-                let x_val = self.registers[regx as usize];
-                let y_val = self.registers[regy as usize];
+                let x_val = self.registers.get(regx);
+                let y_val = self.registers.get(regy);
 
                 if x_val > y_val {
-                    self.registers[0xF] = 1;
+                    self.registers.set_0xf(1);
                 } else {
-                    self.registers[0xF] = 0;
+                    self.registers.set_0xf(0);
                 }
     
                 // Apply subtraction
                 let result = x_val.wrapping_sub(y_val);
-                self.registers[regx as usize] = result;
+                self.registers.set(regx, result);
                 self.pc += 2;
             }
             Instruction::ShiftR(reg) => {
-                self.registers[0xF] = self.registers[reg as usize] & 0b1;
-                self.registers[reg as usize] >>= 1;
+                let high_1 = self.registers.get(reg) & 0b1;
+                self.registers.set_0xf(high_1);
+
+                let val = self.registers.get(reg) >> 1;
+                self.registers.set(reg, val);
                 self.pc += 2;
             }
             Instruction::SubN(regx, regy) => {
-                let x_val = self.registers[regx as usize];
-                let y_val = self.registers[regy as usize];
+                let x_val = self.registers.get(regx);
+                let y_val = self.registers.get(regy);
 
                 if y_val > x_val {
-                    self.registers[0xF] = 1;
+                    self.registers.set_0xf(1);
                 } else {
-                    self.registers[0xF] = 0;
+                    self.registers.set_0xf(0);
                 }
     
                 // Apply subtraction
                 let result = y_val.wrapping_sub(x_val);
-                self.registers[regx as usize] = result;
+                self.registers.set(regx, result);
                 self.pc += 2;
             }
             Instruction::ShiftL(reg) => {
-                self.registers[0xF] = self.registers[reg as usize] >> 7;
-                self.registers[reg as usize] <<= 1;
+                let val = self.registers.get(reg) >> 7;
+                self.registers.set_0xf(val);
+
+                let val = self.registers.get(reg) << 1;
+                self.registers.set(reg, val);
                 self.pc += 2;
             }
             Instruction::SkipNeq(regx, regy) => {
-                if self.registers[regx as usize] != self.registers[regy as usize] {
+                if self.registers.get(regx) != self.registers.get(regy) {
                     self.pc += 4;
                 } else {
                     self.pc += 2;
@@ -283,10 +319,11 @@ impl<T, U> Chip8<T, U>
                 self.pc += 2;
             }
             Instruction::JumpAddV0(addr) => {
-                self.pc = addr + (self.registers[0x0] as u16);
+                self.pc = addr + (self.registers.get(0x0) as u16);
             }
             Instruction::Rand(reg, byte) => {
-                self.registers[reg as usize] = rand::random::<u8>() & byte;
+                let val = rand::random::<u8>() & byte;
+                self.registers.set(reg, val);
                 self.pc += 2;
             }
             Instruction::Draw(regx, regy, nib) => {
@@ -304,8 +341,8 @@ impl<T, U> Chip8<T, U>
 
                     for (bit_pos, bit) in bits.iter().rev().enumerate() {
                         // Get positions
-                        let x_pos = self.registers[regx as usize] + (bit_pos as u8);
-                        let y_pos = self.registers[regy as usize] + (idx as u8);
+                        let x_pos = self.registers.get(regx) + (bit_pos as u8);
+                        let y_pos = self.registers.get(regy) + (idx as u8);
 
                         // Get value
                         let val = *bit == 1;
@@ -321,9 +358,9 @@ impl<T, U> Chip8<T, U>
                 if let Some(ref mut screen) = self.screen {
                     let collision = screen.set_pixel_data(&pixel_data[..]);
                     if collision {
-                        self.registers[0xF] = 1;
+                        self.registers.set_0xf(1);
                     } else {
-                        self.registers[0xF] = 0;
+                        self.registers.set_0xf(0);
                     }
 
                     screen.draw();
@@ -333,7 +370,7 @@ impl<T, U> Chip8<T, U>
             }
             Instruction::SkipEqKey(reg) => {
                 let mut skip = false;
-                if let Ok(key) = Chip8Key::new(self.registers[reg as usize]) {
+                if let Ok(key) = Chip8Key::new(self.registers.get(reg)) {
                     if let Some(ref mut keyboard) = self.keyboard {
                         skip = keyboard.key_pressed(key);
                     }
@@ -347,7 +384,7 @@ impl<T, U> Chip8<T, U>
             }
             Instruction::SkipNeqKey(reg) => {
                 let mut skip = false;
-                if let Ok(key) = Chip8Key::new(self.registers[reg as usize]) {
+                if let Ok(key) = Chip8Key::new(self.registers.get(reg)) {
                     if let Some(ref mut keyboard) = self.keyboard {
                         skip = !keyboard.key_pressed(key);
                     }
@@ -360,35 +397,36 @@ impl<T, U> Chip8<T, U>
                 }
             }
             Instruction::LoadFromDT(reg) => {
-                self.registers[reg as usize] = self.delay_timer;
+                let val = self.delay_timer;
+                self.registers.set(reg, val);
                 self.pc += 2;
             }
             Instruction::LoadKey(reg) => {
                 if let Some(ref mut keyboard) = self.keyboard {
                     if let Some(key_pressed) = keyboard.last_key_pressed() {
-                        self.registers[reg as usize] = key_pressed as u8;
+                        self.registers.set(reg, key_pressed as u8);
                         self.pc += 2;
                     }
                 }
             }
             Instruction::SetDT(reg) => {
-                self.delay_timer = self.registers[reg as usize];
+                self.delay_timer = self.registers.get(reg);
                 self.pc += 2;
             }
             Instruction::SetST(reg) => {
-                self.sound_timer = self.registers[reg as usize];
+                self.sound_timer = self.registers.get(reg);
                 self.pc += 2;
             }
             Instruction::AddIdx(reg) => {
-                self.index = self.index.wrapping_add(self.registers[reg as usize] as u16);
+                self.index = self.index.wrapping_add(self.registers.get(reg) as u16);
                 self.pc += 2;
             }
             Instruction::LoadSprite(reg) => {
-                self.index = 5 * (self.registers[reg as usize] as u16);
+                self.index = 5 * (self.registers.get(reg) as u16);
                 self.pc += 2;
             }
             Instruction::LoadBCD(reg) => {
-                let val = self.registers[reg as usize];
+                let val = self.registers.get(reg);
                 
                 /*
                 for idx in (0..3).rev() {
@@ -406,14 +444,15 @@ impl<T, U> Chip8<T, U>
             }
             Instruction::StoreRegs(reg) => {
                 for idx in 0..(reg+1) {
-                    self.memory[(self.index + idx as u16) as usize] = self.registers[idx as usize];
+                    self.memory[(self.index + idx as u16) as usize] = self.registers.get(idx);
                 }
 
                 self.pc += 2;
             }
             Instruction::ReadRegs(reg) => {
                 for idx in 0..(reg+1) {
-                    self.registers[idx as usize] = self.memory[(self.index + idx as u16) as usize];
+                    let val = self.memory[(self.index + idx as u16) as usize];
+                    self.registers.set(idx, val);
                 }
 
                 self.pc += 2;
