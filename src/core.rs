@@ -1,6 +1,7 @@
 use rand;
 use std::{thread, time};
 use std::time::Duration;
+use std::sync::{Mutex, Arc};
 
 use opcode::{OpCode, Instruction, Register};
 use peripherals::{Chip8Disp, Chip8Input, PixelData, Chip8Key};
@@ -60,8 +61,8 @@ pub struct Chip8<T: Chip8Disp, U: Chip8Input>  {
     stack_ptr: u8,
 
     // Timers
-    delay_timer: u8,
-    sound_timer: u8,
+    delay_timer: Arc<Mutex<u8>>,
+    sound_timer: Arc<Mutex<u8>>,
 
     // Peripherals
     screen: Option<T>,
@@ -74,6 +75,31 @@ impl<T, U> Chip8<T, U>
         let mut memory = [0; 4096];
         populate_builtin_sprites(&mut memory);
 
+        let delay_timer = Arc::new(Mutex::new(0));
+        let sound_timer = Arc::new(Mutex::new(0));
+
+        let delay_clone = Arc::clone(&delay_timer);
+        let sound_clone = Arc::clone(&sound_timer);
+
+        thread::spawn(move || {
+            let rate = Duration::from_millis(16);
+            loop {
+                // Delay here
+                thread::sleep(rate);
+
+                let mut delay = delay_clone.lock().unwrap();
+                let mut sound = sound_clone.lock().unwrap();
+
+                if *delay > 0 {
+                    *delay -= 1;
+                }
+
+                if *sound > 0 {
+                    *sound -= 1;
+                }
+            }
+        });
+
         Chip8 {
             memory: memory,
             registers: Registers::new(),
@@ -82,8 +108,8 @@ impl<T, U> Chip8<T, U>
             stack: [0; 16],
             stack_ptr: 0,
 
-            delay_timer: 0,
-            sound_timer: 0,
+            delay_timer: delay_timer,
+            sound_timer: sound_timer,
 
             screen: None,
             keyboard: None,
@@ -131,7 +157,7 @@ impl<T, U> Chip8<T, U>
             debug!("Registers:
                    reg: {:?}, index: {},
                    stack: {:?}, stack_ptr: {},
-                   delay: {}, sound: {}\n", 
+                   delay: {:?}, sound: {:?}\n", 
                    self.registers, self.index, 
                    self.stack, self.stack_ptr, 
                    self.delay_timer, self.sound_timer);
@@ -145,27 +171,12 @@ impl<T, U> Chip8<T, U>
     pub fn run(&mut self) {
         let rate = Duration::from_millis(2); // 1/s
 
-        let timer_rate = Duration::from_millis(17);
-        let mut timers_time = time::Instant::now();
-
         loop {
             let now = time::Instant::now();
 
             let quit = self.cycle_once();
             if quit {
                 break;
-            }
-
-            if timers_time.elapsed() > timer_rate {
-                timers_time = time::Instant::now();
-                // Decrement timers
-                if self.sound_timer > 0 {
-                    self.sound_timer -= 1;
-                }
-
-                if self.delay_timer > 0 {
-                    self.delay_timer -= 1;
-                }
             }
 
             let elapsed = now.elapsed();
@@ -397,8 +408,8 @@ impl<T, U> Chip8<T, U>
                 }
             }
             Instruction::LoadFromDT(reg) => {
-                let val = self.delay_timer;
-                self.registers.set(reg, val);
+                let val = self.delay_timer.lock().unwrap();
+                self.registers.set(reg, *val);
                 self.pc += 2;
             }
             Instruction::LoadKey(reg) => {
@@ -410,11 +421,13 @@ impl<T, U> Chip8<T, U>
                 }
             }
             Instruction::SetDT(reg) => {
-                self.delay_timer = self.registers.get(reg);
+                let mut delay = self.delay_timer.lock().unwrap();
+                *delay = self.registers.get(reg);
                 self.pc += 2;
             }
             Instruction::SetST(reg) => {
-                self.sound_timer = self.registers.get(reg);
+                let mut sound = self.sound_timer.lock().unwrap();
+                *sound = self.registers.get(reg);
                 self.pc += 2;
             }
             Instruction::AddIdx(reg) => {
